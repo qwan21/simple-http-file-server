@@ -47,8 +47,6 @@ func (s *Server) configureRouter() {
 func (s *Server) uploadFile() http.HandlerFunc {
 
 	return func(w http.ResponseWriter, r *http.Request) {
-		s.mu.Lock()
-		defer s.mu.Unlock()
 		if r.Method == "GET" {
 			t, _ := template.ParseFiles("fileUp.html")
 			t.Execute(w, nil)
@@ -96,8 +94,6 @@ func (s *Server) downloadFile() http.HandlerFunc {
 
 	// Get the data
 	return func(w http.ResponseWriter, r *http.Request) {
-		s.mu.Lock()
-		defer s.mu.Unlock()
 
 		log.Println("Downloading file...")
 		u := path.Base(r.URL.String())
