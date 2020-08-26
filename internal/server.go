@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -59,11 +60,15 @@ func (s *Server) uploadFile() http.HandlerFunc {
 				return
 			}
 			defer input.Close()
+
 			hash, err := s.upload(input, handler)
+
 			if err != nil {
-				log.Println("File not uploaded successfully", err)
+				log.Println("File not uploaded successfully:", err)
+				w.Write([]byte(err.Error() + "\r\n"))
 				return
 			}
+
 			w.Write([]byte(hash + "\r\n"))
 
 			w.Write([]byte(http.StatusText(http.StatusOK) + "\r\n"))
@@ -79,7 +84,15 @@ func (s *Server) deleteFile() http.HandlerFunc {
 		log.Println("Deleting file...")
 		u := path.Base(r.URL.String())
 
-		err := os.Remove(s.config.Directory + s.config.Route + u[:2] + "/" + u)
+		filePath := s.config.Directory + s.config.Route + u[:2] + "/" + u
+		if _, err := os.Stat(filePath); os.IsNotExist(err) {
+			//path does not exist
+			log.Printf("This file not found\r\n")
+			w.Write([]byte(fmt.Errorf("This file not found").Error()))
+			return
+		}
+
+		err := os.Remove(filePath)
 		if err != nil {
 			log.Println(err)
 			w.Write([]byte(err.Error()))
@@ -98,7 +111,16 @@ func (s *Server) downloadFile() http.HandlerFunc {
 		log.Println("Downloading file...")
 		u := path.Base(r.URL.String())
 
-		input, err := os.Open(s.config.Directory + s.config.Route + u[:2] + "/" + u)
+		filePath := s.config.Directory + s.config.Route + u[:2] + "/" + u
+
+		if _, err := os.Stat(filePath); os.IsNotExist(err) {
+			//path does not exist
+			log.Printf("This file not found\r\n")
+			w.Write([]byte(fmt.Errorf("This file not found").Error()))
+			return
+		}
+
+		input, err := os.Open(filePath)
 
 		if err != nil {
 			log.Println(err)

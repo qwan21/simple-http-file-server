@@ -3,6 +3,7 @@ package internal
 import (
 	"crypto/md5"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"log"
 	"mime/multipart"
@@ -12,7 +13,7 @@ import (
 
 func (s *Server) upload(input multipart.File, handler *multipart.FileHeader) (string, error) {
 
-	log.Printf("Uploaded File: %+v\nFile Size: %+v\nMIME Header: %+v\n", handler.Filename, handler.Size, handler.Header)
+	log.Printf("Uploaded File: %+v\r\nFile Size: %+v\r\nMIME Header: %+v\r\n", handler.Filename, handler.Size, handler.Header)
 	hash := md5.New()
 
 	if _, err := io.Copy(hash, input); err != nil {
@@ -23,10 +24,28 @@ func (s *Server) upload(input multipart.File, handler *multipart.FileHeader) (st
 
 	subDir := md5[:2]
 
-	_ = os.Mkdir(s.config.Directory+s.config.Route, os.ModeDir)
-	_ = os.Mkdir(s.config.Directory+s.config.Route+subDir, os.ModeDir)
+	rootDir := s.config.Directory + s.config.Route
+	fileDir := rootDir + subDir
 
-	outPath := filepath.Join(s.config.Directory+s.config.Route+subDir, filepath.Base(md5))
+	outPath := filepath.Join(fileDir, filepath.Base(md5))
+
+	if _, err := os.Stat(outPath); !os.IsNotExist(err) {
+		// file exists
+
+		return "", fmt.Errorf("This file exist")
+	}
+
+	if _, err := os.Stat(rootDir); os.IsNotExist(err) {
+		//path does not exist
+		log.Printf("Path %s doesn't exsist, creating path...\r\n", rootDir)
+		_ = os.Mkdir(rootDir, os.ModePerm)
+	}
+
+	if _, err := os.Stat(fileDir); os.IsNotExist(err) {
+		//path does not exist
+		log.Printf("Path %s doesn't exsist, creating path...\r\n", fileDir)
+		_ = os.Mkdir(fileDir, os.ModePerm)
+	}
 
 	out, err := os.OpenFile(outPath, os.O_CREATE|os.O_WRONLY, 0600)
 	if err != nil {
