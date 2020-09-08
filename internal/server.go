@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -10,39 +11,86 @@ import (
 	"sync"
 	"test/config"
 	"text/template"
+	"time"
 
 	"github.com/gorilla/mux"
 )
 
 //Server describes file server struct
 type Server struct {
-	router *mux.Router
-	config *config.Config
-	mu     sync.Mutex
+	mu          sync.Mutex
+	router      *mux.Router
+	config      *config.Config
+	Server      *http.Server
+	ShutdownReq chan bool
 }
 
 // New gets Apps params
 func New(cfg *config.Config) *Server {
 
 	return &Server{
-		router: mux.NewRouter(),
-		config: cfg,
+		router:      mux.NewRouter(),
+		config:      cfg,
+		ShutdownReq: make(chan bool),
 	}
 }
 
 // Start method start test service
-func (s *Server) Start() error {
+func (s *Server) Start() {
 
 	s.configureRouter()
 
-	addr := s.config.Host + ":" + s.config.Port
-	return http.ListenAndServe(addr, s.router)
+	s.Server = &http.Server{
+		Addr:    s.config.Host + ":" + s.config.Port,
+		Handler: s.router,
+	}
+
+	go func() {
+		err := s.Server.ListenAndServe()
+		if err != nil {
+			log.Println("Listen and serve:", err)
+		}
+
+	}()
+	s.waitShutdown()
+
 }
 
+//waitShutdown waits shutdownReq
+func (s *Server) waitShutdown() {
+
+	<-s.ShutdownReq
+	log.Println("Shutdown...")
+
+	//Create shutdown context with 10 second timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	err := s.Server.Shutdown(ctx)
+
+	if err != nil {
+		log.Println("Shutdown request error:", err)
+	}
+
+	log.Println("Stopping http file server...")
+
+}
 func (s *Server) configureRouter() {
 	s.router.HandleFunc("/api/download/{id}", s.downloadFile()).Methods("GET")
 	s.router.HandleFunc("/api/delete/{id}", s.deleteFile()).Methods("DELETE")
 	s.router.HandleFunc("/api/upload", s.uploadFile()).Methods("GET", "POST")
+	s.router.HandleFunc("/api/shutdown", s.shutdown()).Methods("GET", "POST")
+}
+
+func (s *Server) shutdown() http.HandlerFunc {
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("Shutdown server"))
+		go func() {
+			s.ShutdownReq <- true
+		}()
+	}
+
 }
 
 func (s *Server) uploadFile() http.HandlerFunc {

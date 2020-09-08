@@ -44,9 +44,8 @@ func (a *App) run(args []string) error {
 	a.cfg = cfg
 
 	srv := server.New(a.cfg.Config)
-	if err := srv.Start(); err != nil {
-		return err
-	}
+
+	srv.Start()
 
 	return nil
 }
