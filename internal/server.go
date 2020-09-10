@@ -21,8 +21,8 @@ type Server struct {
 	mu          sync.Mutex
 	router      *mux.Router
 	config      *config.Config
-	Server      *http.Server
-	ShutdownReq chan bool
+	server      *http.Server
+	shutdownReq chan bool
 }
 
 // New gets Apps params
@@ -31,7 +31,7 @@ func New(cfg *config.Config) *Server {
 	return &Server{
 		router:      mux.NewRouter(),
 		config:      cfg,
-		ShutdownReq: make(chan bool),
+		shutdownReq: make(chan bool),
 	}
 }
 
@@ -40,13 +40,13 @@ func (s *Server) Start() {
 
 	s.configureRouter()
 
-	s.Server = &http.Server{
+	s.server = &http.Server{
 		Addr:    s.config.Host + ":" + s.config.Port,
 		Handler: s.router,
 	}
 
 	go func() {
-		err := s.Server.ListenAndServe()
+		err := s.server.ListenAndServe()
 		if err != nil {
 			log.Println("Listen and serve:", err)
 		}
@@ -59,14 +59,14 @@ func (s *Server) Start() {
 //waitShutdown waits shutdownReq
 func (s *Server) waitShutdown() {
 
-	<-s.ShutdownReq
+	<-s.shutdownReq
 	log.Println("Shutdown...")
 
 	//Create shutdown context with 10 second timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	err := s.Server.Shutdown(ctx)
+	err := s.server.Shutdown(ctx)
 
 	if err != nil {
 		log.Println("Shutdown request error:", err)
@@ -87,7 +87,7 @@ func (s *Server) shutdown() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Shutdown server"))
 		go func() {
-			s.ShutdownReq <- true
+			s.shutdownReq <- true
 		}()
 	}
 
